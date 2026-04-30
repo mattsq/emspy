@@ -559,21 +559,17 @@ class FltQuery(Query):
         # this query result at the runway ID column of the original query result.
         # I know this is crappy but it seems the best way I could find.
         for i, cid, cname, ctype in zip(range(len(col)), col_id, col, coltypes):
+            col_name = df.columns[i]
             try:
                 if ctype == 'number':
-                    df.iloc[:, i] = pd.to_numeric(df.iloc[:, i])
+                    df[col_name] = pd.to_numeric(df[col_name])
                 elif ctype == 'discrete':
-                    df.iloc[:, i] = self.__key_to_val(df.iloc[:, i], cid)
-                    # k_map = self.__flight.list_allvalues(field_id=cid, in_dict=True)
-                    # if len(k_map) == 0:
-                    #     df[cname] = self.__get_rwy_id(cname)
-                    # else:
-                    #     df = df.replace({cname: k_map})
+                    df[col_name] = self.__key_to_val(df[col_name], cid)
                 elif ctype == 'boolean':
-                    df.iloc[:, i] = df.iloc[:, i].astype(bool)
+                    df[col_name] = df[col_name].astype(bool)
                 elif ctype == 'dateTime':
-                    df.iloc[:, i] = pd.to_datetime(df.iloc[:, i], utc=True)
-            except ValueError:
+                    df[col_name] = pd.to_datetime(df[col_name], utc=True)
+            except (ValueError, TypeError):
                 print("Somethings wrong when converting to Pandas DataFrame for column '%s' "
                       "(type: %s)." % (cname, ctype))
         print("Done.")

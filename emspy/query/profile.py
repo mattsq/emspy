@@ -103,7 +103,7 @@ class Profile(Query):
                 uri_args=(self._ems_id, self._guid)
             )
             data = pd.DataFrame(dict_data)
-            data.set_index('id', inplace=True)
+            data = data.set_index('id')
             self._events_glossary = data
             return self._events_glossary
         else:
@@ -178,9 +178,10 @@ class Profile(Query):
         events = pd.DataFrame(profile_results['events'])
 
         # Grab event names and ID's from the glossary.
-        event_name_details = self.__filter_glossary('event', 'eventSpecific')[['eventTypeId', 'name']]\
-            .astype({'eventTypeId': int})\
-            .rename(columns={'name': 'eventName'})
+        event_name_details = self.__filter_glossary('event', 'eventSpecific')[['eventTypeId', 'name']]
+        event_name_details = event_name_details.assign(
+            eventTypeId=pd.to_numeric(event_name_details['eventTypeId']).astype(int)
+        ).rename(columns={'name': 'eventName'})
         # Merge in the event names so the user has something human-readable to work with.
         event_data = events\
             .merge(event_name_details, how='left', left_on='eventType', right_on='eventTypeId')\
