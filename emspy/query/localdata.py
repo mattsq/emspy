@@ -111,6 +111,12 @@ class LocalData(object):
 					# New secure format: (where_clause, params)
 					where_clause, params = condition
 					query = query + " WHERE %s" % where_clause
+					# Convert numpy types to native Python types for sqlite3 compatibility
+					if params is not None:
+						import numpy as np
+						params = tuple(
+							x.item() if isinstance(x, np.generic) else x for x in params
+						)
 				else:
 					# Old format: direct string (backward compatible)
 					query = query + " WHERE %s" % condition
@@ -147,6 +153,11 @@ class LocalData(object):
 					# New secure format: (where_clause, params)
 					where_clause, params = condition
 					query = "DELETE FROM %s WHERE %s;" % (table_name, where_clause)
+					# Convert numpy types to native Python types for sqlite3 compatibility
+					import numpy as np
+					params = tuple(
+						x.item() if isinstance(x, np.generic) else x for x in params
+					)
 					self._conn.execute(query, params)
 				else:
 					# Old format: direct string (backward compatible)
