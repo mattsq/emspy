@@ -1,0 +1,148 @@
+name: pandas compatibility
+
+# Extended test matrix that exercises emspy across the relevant pandas
+# versions. Targets the changes on `fix/pandas-3.0-compat`, which raised the
+# minimum supported pandas to 1.5 and adjusted code for pandas 3.0 / numpy 2.x.
+#
+# The matrix covers pandas 1.5, 2.0, 2.1, 2.2 and the pandas nightly build
+# (which tracks the in-development 3.0 branch). Python versions are paired
+# with pandas releases according to each release's own support matrix.
+
+on:
+  push:
+    branches:
+      - master
+      - 'fix/pandas-3.0-compat'
+      - 'claude/add-pandas-test-workflows-**'
+  pull_request:
+    branches:
+      - master
+      - 'fix/pandas-3.0-compat'
+  schedule:
+    # Weekly run so a fresh pandas nightly is exercised even when no commits
+    # land on the branch.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  released:
+    name: pandas ${{ matrix.pandas }} / py ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # pandas 1.5 supports CPython 3.8 - 3.11
+          - pandas: '1.5.*'
+            python: '3.9'
+            numpy: '<2'
+          - pandas: '1.5.*'
+            python: '3.10'
+            numpy: '<2'
+          - pandas: '1.5.*'
+            python: '3.11'
+            numpy: '<2'
+
+          # pandas 2.0 supports CPython 3.8 - 3.11
+          - pandas: '2.0.*'
+            python: '3.9'
+            numpy: '<2'
+          - pandas: '2.0.*'
+            python: '3.11'
+            numpy: '<2'
+
+          # pandas 2.1 supports CPython 3.9 - 3.12
+          - pandas: '2.1.*'
+            python: '3.9'
+            numpy: '<2'
+          - pandas: '2.1.*'
+            python: '3.12'
+            numpy: '<2'
+
+          # pandas 2.2 is the first release compatible with numpy 2.x and
+          # supports CPython 3.9 - 3.13.
+          - pandas: '2.2.*'
+            python: '3.9'
+            numpy: '<2'
+          - pandas: '2.2.*'
+            python: '3.11'
+            numpy: '>=2,<3'
+          - pandas: '2.2.*'
+            python: '3.12'
+            numpy: '>=2,<3'
+          - pandas: '2.2.*'
+            python: '3.13'
+            numpy: '>=2,<3'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+
+      - name: Pin pandas==${{ matrix.pandas }} and numpy${{ matrix.numpy }}
+        run: |
+          pip install "pandas==${{ matrix.pandas }}" "numpy${{ matrix.numpy }}"
+
+      - name: Install dev requirements
+        run: |
+          pip install -r dev-requirements.txt
+
+      - name: Show resolved versions
+        run: |
+          python -c "import sys, pandas, numpy; print('python', sys.version); print('pandas', pandas.__version__); print('numpy', numpy.__version__)"
+
+      - name: Run tests
+        run: python -m pytest tests
+
+  nightly:
+    # pandas nightly builds the 3.0 development line. Failures here are
+    # informational so a regression in upstream pandas does not block CI on
+    # this repository, but the job still surfaces issues early.
+    name: pandas nightly / py ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+
+      - name: Install pandas + numpy nightlies
+        run: |
+          pip install --pre --upgrade \
+            --extra-index-url https://pypi.anaconda.org/scientific-python-nightly-wheels/simple \
+            pandas numpy
+
+      - name: Install dev requirements
+        run: |
+          pip install -r dev-requirements.txt
+
+      - name: Show resolved versions
+        run: |
+          python -c "import sys, pandas, numpy; print('python', sys.version); print('pandas', pandas.__version__); print('numpy', numpy.__version__)"
+
+      - name: Run tests
+        run: python -m pytest tests
