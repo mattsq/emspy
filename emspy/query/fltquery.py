@@ -559,16 +559,19 @@ class FltQuery(Query):
         # this query result at the runway ID column of the original query result.
         # I know this is crappy but it seems the best way I could find.
         for i, cid, cname, ctype in zip(range(len(col)), col_id, col, coltypes):
-            col_name = df.columns[i]
+            # Positional read + isetitem write so that DataFrames with duplicate
+            # column names still resolve to a Series and conversion is applied
+            # to exactly the i-th column.
+            series = df.iloc[:, i]
             try:
                 if ctype == 'number':
-                    df[col_name] = pd.to_numeric(df[col_name])
+                    df.isetitem(i, pd.to_numeric(series))
                 elif ctype == 'discrete':
-                    df[col_name] = self.__key_to_val(df[col_name], cid)
+                    df.isetitem(i, self.__key_to_val(series, cid))
                 elif ctype == 'boolean':
-                    df[col_name] = df[col_name].astype(bool)
+                    df.isetitem(i, series.astype(bool))
                 elif ctype == 'dateTime':
-                    df[col_name] = pd.to_datetime(df[col_name], utc=True)
+                    df.isetitem(i, pd.to_datetime(series, utc=True))
             except (ValueError, TypeError):
                 print("Somethings wrong when converting to Pandas DataFrame for column '%s' "
                       "(type: %s)." % (cname, ctype))
