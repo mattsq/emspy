@@ -640,7 +640,7 @@ class Flight(object):
 def _get_shortest(fields):
     if isinstance(fields, pd.DataFrame) is False:
         sys.exit("Input should be a Pandas dataframe.")
-    fields.reset_index(inplace=True)
+    fields = fields.reset_index()
     return fields.loc[fields.name.str.len().idxmin()].to_dict()
 
 

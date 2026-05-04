@@ -559,21 +559,20 @@ class FltQuery(Query):
         # this query result at the runway ID column of the original query result.
         # I know this is crappy but it seems the best way I could find.
         for i, cid, cname, ctype in zip(range(len(col)), col_id, col, coltypes):
+            # Positional read + isetitem write so that DataFrames with duplicate
+            # column names still resolve to a Series and conversion is applied
+            # to exactly the i-th column.
+            series = df.iloc[:, i]
             try:
                 if ctype == 'number':
-                    df.iloc[:, i] = pd.to_numeric(df.iloc[:, i])
+                    df.isetitem(i, pd.to_numeric(series))
                 elif ctype == 'discrete':
-                    df.iloc[:, i] = self.__key_to_val(df.iloc[:, i], cid)
-                    # k_map = self.__flight.list_allvalues(field_id=cid, in_dict=True)
-                    # if len(k_map) == 0:
-                    #     df[cname] = self.__get_rwy_id(cname)
-                    # else:
-                    #     df = df.replace({cname: k_map})
+                    df.isetitem(i, self.__key_to_val(series, cid))
                 elif ctype == 'boolean':
-                    df.iloc[:, i] = df.iloc[:, i].astype(bool)
+                    df.isetitem(i, series.astype(bool))
                 elif ctype == 'dateTime':
-                    df.iloc[:, i] = pd.to_datetime(df.iloc[:, i], utc=True)
-            except ValueError:
+                    df.isetitem(i, pd.to_datetime(series, utc=True))
+            except (ValueError, TypeError):
                 print("Somethings wrong when converting to Pandas DataFrame for column '%s' "
                       "(type: %s)." % (cname, ctype))
         print("Done.")

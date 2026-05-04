@@ -100,7 +100,7 @@ class AnalyticSet(Asset):
         """
  
         if not analytic_set_path:
-            raise ValueError('No Analytic Set path was passed in. To access the root folder use "\<set name>" or "root\<set name>"')
+            raise ValueError(r'No Analytic Set path was passed in. To access the root folder use "\<set name>" or "root\<set name>"')
         self._analytic_set_path = analytic_set_path
         self.__parse_path()
         
@@ -116,9 +116,7 @@ class AnalyticSet(Asset):
             self._analytic_set_description = flat_analytic_set_dict['description']
             data_df = pd.DataFrame.from_records(flat_analytic_set_dict['items'])
 
-            analytic_set_df = pd.DataFrame(columns=AnalyticSet.__analytic_set_columns)
-
-            analytic_set_df = pd.concat([analytic_set_df, data_df])
+            analytic_set_df = data_df.reindex(columns=AnalyticSet.__analytic_set_columns)
             return analytic_set_df
         except:
             print('-- Failed to fetch analytic set "%s"' % self._analytic_set_path)
