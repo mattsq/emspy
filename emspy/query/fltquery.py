@@ -129,6 +129,51 @@ class FltQuery(Query):
             self.__queryset['select'].append(d)
             self.__columns.append(field)
 
+    def select_guid(self, *args, **kwargs):
+        """
+        Select fields by their GUID identifiers directly, bypassing name-based
+        metadata tree search. This is faster and avoids ambiguity when the GUID
+        is already known.
+
+        Parameters
+        ----------
+        args:
+            GUID strings identifying fields to query
+        kwargs:
+            keyword arguments
+
+        Keyword arguments
+        -----------------
+        aggregate: str
+            aggregation to apply, one of:
+            ['none', 'avg', 'count', 'max', 'min', 'stdev', 'sum', 'var']
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> query.select_guid(
+        ...     "[-hub-][field][[[ems-core][entity-type][foqa-flights]]"
+        ...     "[[ems-core][base-field][flight.uid]]]"
+        ... )
+        >>> query.select_guid("some-field-guid", aggregate="avg")
+        """
+        aggs = ['none', 'avg', 'count', 'max', 'min', 'stdev', 'sum', 'var']
+        aggregate = kwargs.get('aggregate', 'none')
+        if aggregate not in aggs:
+            sys.exit("Wrong aggregation selected. Use one of %s." % aggs)
+
+        for guid in args:
+            field = self.__flight.resolve_guid(guid)
+            d = {
+                'fieldId': field['id'],
+                'aggregate': aggregate
+            }
+            self.__queryset['select'].append(d)
+            self.__columns.append(field)
+
     def deselect(self, *args):
         """
         Removes fields from the query

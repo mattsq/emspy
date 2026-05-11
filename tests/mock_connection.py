@@ -255,6 +255,16 @@ class MockConnection(Connection):
                           '[[[ems-core][entity-type][foqa-flights]]'
                           '[[ems-core][base-field][flight.date-confidence]]]'
                 }
+            elif uri_args[2] == '[-hub-][field]' \
+                                '[[[ems-core][entity-type][foqa-flights]]' \
+                                '[[ems-core][base-field][flight.uid]]]':
+                content = {
+                    'type': 'number',
+                    'name': 'Flight Record',
+                    'id': '[-hub-][field]'
+                          '[[[ems-core][entity-type][foqa-flights]]'
+                          '[[ems-core][base-field][flight.uid]]]'
+                }
         elif uri_keys == ('aircraft', 'list'):
             content = [
                 {
