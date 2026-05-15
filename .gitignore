@@ -13,3 +13,4 @@ test-output.xml
 test.db
 tmpDB.db
 dev/
+smoke_test_*.py
