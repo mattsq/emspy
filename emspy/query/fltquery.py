@@ -194,7 +194,7 @@ class FltQuery(Query):
             matching_entries = [d for d in self.__queryset['select'] if d['fieldId'] == field['id']]
             for entry in matching_entries:
                 self.__queryset['select'].remove(entry)
-            self.__columns.remove(field)
+            self.__columns = [c for c in self.__columns if c['id'] != field['id']]
 
     def group_by(self, *args):
         """

@@ -104,3 +104,37 @@ def test_select_guid_combines_with_select():
     assert len(qs['select']) == 2
     assert qs['select'][0]['fieldId'] == FLIGHT_RECORD_GUID
     assert qs['select'][1]['fieldId'] == ENGINE_SERIES_GUID
+
+
+def test_deselect_after_select_guid_cached():
+    """deselect removes a field that was added via select_guid (cached path)."""
+    query = make_query()
+    query.select_guid(FLIGHT_RECORD_GUID)
+    qs = query.in_dict()
+    assert len(qs['select']) == 1
+
+    query.deselect('Flight Record')
+    qs = query.in_dict()
+    assert len(qs['select']) == 0
+
+
+def test_deselect_after_select_guid_api():
+    """deselect removes a field added via select_guid's API fallback path."""
+    connection = MockConnection(user='', pwd='')
+    query = MockFltQuery(connection, 'ems24-app',
+                         data_file=os.path.join(test_path, 'mock_metadata.db'))
+    query.set_database('FDW Flights')
+    # Empty fieldtree forces resolve_guid to use the API fallback,
+    # which produces a dict with parent_id=None
+    query.select_guid(FLIGHT_RECORD_GUID)
+    qs = query.in_dict()
+    assert len(qs['select']) == 1
+
+    # Now populate the fieldtree so deselect can find the field by name
+    query.update_fieldtree(
+        'Flight Information',
+        exclude_tree=['Processing', 'Date Times', 'FlightPulse']
+    )
+    query.deselect('Flight Record')
+    qs = query.in_dict()
+    assert len(qs['select']) == 0
