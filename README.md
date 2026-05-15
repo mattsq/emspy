@@ -172,12 +172,12 @@ You may want to define grouping, which is described in the next section, when yo
 - Field name keyword along with multiple keywords for the names of upstream field groups (i.e., directories). 
     - Ex) ("flight info", "date (exact)")
 
-### Select by GUID
+### Select by ID
 
-If you already know the GUID identifiers for the fields you want, you can use `select_guid(...)` to add them directly without searching the metadata tree. This is faster and avoids ambiguity from name-based matching.
+If you already know the id (moniker) for the fields you want, you can use `select_id(...)` to add them directly without searching the metadata tree. This is faster and avoids ambiguity from name-based matching.
 
 ```python
-query.select_guid(
+query.select_id(
     "[-hub-][field][[[ems-core][entity-type][foqa-flights]][[ems-core][base-field][flight.uid]]]",
     "[-hub-][field][[[ems-core][entity-type][foqa-flights]][[ems-core][base-field][flight.exact-date]]]"
 )
@@ -186,13 +186,13 @@ query.select_guid(
 Aggregation is supported the same way as `select(...)`:
 
 ```python
-query.select_guid(
+query.select_id(
     "[-hub-][field][[[ems-core][entity-type][foqa-flights]][[ems-core][base-field][flight.uid]]]",
     aggregate="count"
 )
 ```
 
-`select_guid(...)` can be freely mixed with `select(...)` in the same query. If a GUID is already present in the local metadata tree it is resolved from cache; otherwise it is looked up via the EMS API and cached for future use.
+`select_id(...)` can be freely mixed with `select(...)` in the same query. If a field id is already present in the local metadata tree it is resolved from cache; otherwise it is looked up via the EMS API and cached for future use.
 
 
 ### Group by & Order by

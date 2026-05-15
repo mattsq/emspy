@@ -537,15 +537,16 @@ class Flight(object):
         res = [x[1].to_dict() for x in res.iterrows()]
         return res
 
-    def resolve_guid(self, guid):
+    def resolve_id(self, field_id):
         """
-        Resolve a field GUID to its metadata dict. Checks the local fieldtree first;
-        if not found, queries the EMS field API and caches the result.
+        Resolve a field id (moniker) to its metadata dict. Checks the local
+        fieldtree first; if not found, queries the EMS field API and caches
+        the result.
 
         Parameters
         ----------
-        guid: str
-            The GUID identifier string for the field.
+        field_id: str
+            The id (moniker) string for the field.
 
         Returns
         -------
@@ -555,21 +556,21 @@ class Flight(object):
         Raises
         ------
         ValueError
-            If the GUID cannot be resolved via the API.
+            If the field id cannot be resolved via the API.
         """
         tree = self._trees['fieldtree']
-        cached = tree[(tree.nodetype == 'field') & (tree.id == guid)]
+        cached = tree[(tree.nodetype == 'field') & (tree.id == field_id)]
         if not cached.empty:
             return cached.iloc[0].to_dict()
 
         # Query the EMS field API
         resp_h, content = self._conn.request(
             uri_keys=('database', 'field'),
-            uri_args=(self._ems_id, self._db_id, guid)
+            uri_args=(self._ems_id, self._db_id, field_id)
         )
 
         if content is None or 'id' not in content:
-            raise ValueError("Could not resolve field GUID: %s" % guid)
+            raise ValueError("Could not resolve field id: %s" % field_id)
 
         field_row = {
             'ems_id': self._ems_id,
@@ -577,7 +578,7 @@ class Flight(object):
             'id': content['id'],
             'nodetype': 'field',
             'type': content.get('type', 'number'),
-            'name': content.get('name', guid),
+            'name': content.get('name', field_id),
             'parent_id': None
         }
         if hasattr(self, '_uri_root') and self._uri_root:
