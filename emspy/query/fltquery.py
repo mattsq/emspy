@@ -129,6 +129,51 @@ class FltQuery(Query):
             self.__queryset['select'].append(d)
             self.__columns.append(field)
 
+    def select_id(self, *args, **kwargs):
+        """
+        Select fields by their id (moniker) directly, bypassing name-based
+        metadata tree search. This is faster and avoids ambiguity when the
+        field id is already known.
+
+        Parameters
+        ----------
+        args:
+            Field id strings identifying fields to query
+        kwargs:
+            keyword arguments
+
+        Keyword arguments
+        -----------------
+        aggregate: str
+            aggregation to apply, one of:
+            ['none', 'avg', 'count', 'max', 'min', 'stdev', 'sum', 'var']
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> query.select_id(
+        ...     "[-hub-][field][[[ems-core][entity-type][foqa-flights]]"
+        ...     "[[ems-core][base-field][flight.uid]]]"
+        ... )
+        >>> query.select_id("some-field-id", aggregate="avg")
+        """
+        aggs = ['none', 'avg', 'count', 'max', 'min', 'stdev', 'sum', 'var']
+        aggregate = kwargs.get('aggregate', 'none')
+        if aggregate not in aggs:
+            sys.exit("Wrong aggregation selected. Use one of %s." % aggs)
+
+        for field_id in args:
+            field = self.__flight.resolve_id(field_id)
+            d = {
+                'fieldId': field['id'],
+                'aggregate': aggregate
+            }
+            self.__queryset['select'].append(d)
+            self.__columns.append(field)
+
     def deselect(self, *args):
         """
         Removes fields from the query
@@ -149,7 +194,7 @@ class FltQuery(Query):
             matching_entries = [d for d in self.__queryset['select'] if d['fieldId'] == field['id']]
             for entry in matching_entries:
                 self.__queryset['select'].remove(entry)
-            self.__columns.remove(field)
+            self.__columns = [c for c in self.__columns if c['id'] != field['id']]
 
     def group_by(self, *args):
         """

@@ -537,6 +537,61 @@ class Flight(object):
         res = [x[1].to_dict() for x in res.iterrows()]
         return res
 
+    def resolve_id(self, field_id):
+        """
+        Resolve a field id (moniker) to its metadata dict. Checks the local
+        fieldtree first; if not found, queries the EMS field API and caches
+        the result.
+
+        Parameters
+        ----------
+        field_id: str
+            The id (moniker) string for the field.
+
+        Returns
+        -------
+        dict
+            Field metadata dict with keys: id, name, type, nodetype, ems_id, db_id, parent_id.
+
+        Raises
+        ------
+        ValueError
+            If the field id cannot be resolved via the API.
+        """
+        tree = self._trees['fieldtree']
+        cached = tree[(tree.nodetype == 'field') & (tree.id == field_id)]
+        if not cached.empty:
+            return cached.iloc[0].to_dict()
+
+        # Query the EMS field API
+        resp_h, content = self._conn.request(
+            uri_keys=('database', 'field'),
+            uri_args=(self._ems_id, self._db_id, field_id)
+        )
+
+        if content is None or 'id' not in content:
+            raise ValueError("Could not resolve field id: %s" % field_id)
+
+        field_row = {
+            'ems_id': self._ems_id,
+            'db_id': self._db_id,
+            'id': content['id'],
+            'nodetype': 'field',
+            'type': content.get('type', 'number'),
+            'name': content.get('name', field_id),
+            'parent_id': None
+        }
+        if hasattr(self, '_uri_root') and self._uri_root:
+            field_row['uri_root'] = self._uri_root
+
+        # Cache in fieldtree
+        self._trees['fieldtree'] = pd.concat(
+            [self._trees['fieldtree'], pd.DataFrame([field_row])],
+            axis=0, join='outer', ignore_index=True
+        )
+
+        return field_row
+
     def list_allvalues(self, field=None, field_id=None, in_dict=False, in_df=False):
         """
         List all available values for a discrete field. Will raise error if the type of
