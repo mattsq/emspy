@@ -5,6 +5,7 @@ import pandas as pd
 import emspy
 from emspy.query import Fieldset
 from emspy.query.fieldset import _parse_fieldset_fields
+from emspy.query.fltquery import _extract_field_entity_type
 from mock_connection import MockConnection
 from mock_ems import MockEMS
 from mock_query import MockFltQuery
@@ -33,6 +34,14 @@ def fltquery(mocks, tmp_path):
     db_path = os.path.join(test_path, 'mock_metadata.db')
     return MockFltQuery(MockConnection(user='', pwd=''), 'ems-mock',
                          data_file=db_path)
+
+
+@pytest.fixture
+def fltquery_with_flights_db(fltquery):
+    # FltQuery pointed at the FDW Flights database so the entity-type guard
+    # in select_fieldset can compare against a real database ID.
+    fltquery.set_database('FDW Flights')
+    return fltquery
 
 
 # get_groups -----------------------------------------------------------------
@@ -307,3 +316,81 @@ def test_select_fieldset_rejects_unknown_aggregate(fltquery):
 def test_select_fieldset_empty_fieldset_is_noop(fltquery):
     fltquery.select_fieldset('Empty Fieldset', group='mock-group-id')
     assert len(fltquery._FltQuery__queryset['select']) == 0
+
+
+# Entity-type extraction -----------------------------------------------------
+
+def test_extract_field_entity_type_recognises_shaped_id():
+    fid = ("[-hub-][field][[[ems-core][entity-type][foqa-flights]]"
+           "[[ems-core][base-field][flight.exact-date]]]")
+    assert _extract_field_entity_type(fid) == "[ems-core][entity-type][foqa-flights]"
+
+
+def test_extract_field_entity_type_handles_dimension_token():
+    fid = ("[-hub-][field][[[ems-core][entity-type]"
+           "[dimension:096709fb2fb743b1bb3b6bbbf7160c8b]]"
+           "[[ems-core][base-field][example]]]")
+    assert _extract_field_entity_type(fid) == (
+        "[ems-core][entity-type][dimension:096709fb2fb743b1bb3b6bbbf7160c8b]"
+    )
+
+
+def test_extract_field_entity_type_returns_none_for_bare_id():
+    assert _extract_field_entity_type("field-id-1") is None
+
+
+def test_extract_field_entity_type_returns_none_for_non_string():
+    assert _extract_field_entity_type(None) is None
+    assert _extract_field_entity_type(12345) is None
+
+
+# Database verification guard -----------------------------------------------
+
+def test_select_fieldset_skips_verification_when_no_database_set(fltquery):
+    # The 'fltquery' fixture never calls set_database. The guard must skip
+    # silently rather than blowing up when there's nothing to compare to.
+    fltquery.select_fieldset('Flights Fieldset', group='real-ids-group-id')
+    assert len(fltquery._FltQuery__queryset['select']) == 2
+
+
+def test_select_fieldset_passes_verification_when_database_matches(
+        fltquery_with_flights_db):
+    fltquery_with_flights_db.select_fieldset(
+        'Flights Fieldset', group='real-ids-group-id'
+    )
+    assert len(fltquery_with_flights_db._FltQuery__queryset['select']) == 2
+
+
+def test_select_fieldset_rejects_mismatched_database(fltquery_with_flights_db):
+    with pytest.raises(ValueError) as exc:
+        fltquery_with_flights_db.select_fieldset(
+            'Aircraft Fieldset', group='real-ids-group-id'
+        )
+    msg = str(exc.value)
+    assert "different database" in msg
+    assert "foqa-flights" in msg
+    assert "aircraft" in msg
+    # Nothing was added.
+    assert len(fltquery_with_flights_db._FltQuery__queryset['select']) == 0
+
+
+def test_select_fieldset_rejects_mixed_databases(fltquery_with_flights_db):
+    with pytest.raises(ValueError) as exc:
+        fltquery_with_flights_db.select_fieldset(
+            'Mixed DB Fieldset', group='real-ids-group-id'
+        )
+    msg = str(exc.value)
+    assert "multiple databases" in msg
+    assert "foqa-flights" in msg
+    assert "aircraft" in msg
+    assert len(fltquery_with_flights_db._FltQuery__queryset['select']) == 0
+
+
+def test_select_fieldset_skips_verification_for_unshaped_ids(
+        fltquery_with_flights_db):
+    # 'Mock Fieldset' uses bare 'field-id-N' IDs with no extractable entity
+    # type. The guard must skip silently and let the select proceed.
+    fltquery_with_flights_db.select_fieldset(
+        'Mock Fieldset', group='mock-group-id'
+    )
+    assert len(fltquery_with_flights_db._FltQuery__queryset['select']) == 3

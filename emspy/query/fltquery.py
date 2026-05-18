@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import print_function
 
 import json
+import re
 import sys
 from builtins import str
 from builtins import zip
@@ -13,6 +14,20 @@ from future.utils import string_types
 from emspy.query import *
 from .query import Query
 from .fieldset import Fieldset
+
+
+# Field IDs embed the source entity-type as a `[ems-...][entity-type][...]`
+# token, which is also the form returned by /database-groups and used as
+# Flight._db_id. This helper extracts that token so a fieldset's fields can
+# be compared against the query's selected database.
+_ENTITY_TYPE_RE = re.compile(r"\[ems-[a-z0-9]+\]\[entity-type\]\[[^\]]+\]")
+
+
+def _extract_field_entity_type(field_id):
+    if not isinstance(field_id, string_types):
+        return None
+    m = _ENTITY_TYPE_RE.search(field_id)
+    return m.group(0) if m else None
 
 
 class FltQuery(Query):
@@ -216,6 +231,8 @@ class FltQuery(Query):
                   % fs.get('name', '<unknown>'))
             return
 
+        self._verify_fieldset_database_match(fs)
+
         added = 0
         for _, row in fields_df.iterrows():
             field_id = row.get('id')
@@ -267,6 +284,44 @@ class FltQuery(Query):
                 % (fieldset, '\n  '.join(paths))
             )
         return self.__fieldset.get_fieldset(hits[0]['group_id'], fieldset)
+
+    def _verify_fieldset_database_match(self, fs):
+        # Skipped silently when no database has been selected yet (the user can
+        # call set_database() later) or when no field IDs carry an extractable
+        # entity-type token (e.g. mock/test field IDs).
+        if getattr(self.__flight, '_db_id', None) is None:
+            return
+
+        entity_types = []
+        for fid in fs['fields']['id'].tolist():
+            et = _extract_field_entity_type(fid)
+            if et:
+                entity_types.append(et)
+        if not entity_types:
+            return
+
+        unique_types = sorted(set(entity_types))
+        if len(unique_types) > 1:
+            raise ValueError(
+                "Fieldset '%s' mixes fields from multiple databases; cannot "
+                "apply as a single select. Distinct source databases:\n  %s"
+                % (fs.get('name', '<unknown>'), '\n  '.join(unique_types))
+            )
+
+        expected_db = unique_types[0]
+        query_db = self.__flight._db_id
+        # Tolerate stray whitespace on user-supplied database IDs (a common
+        # copy/paste hazard). Case and bracket structure remain significant:
+        # entity tokens embed case-sensitive UUID / profile hashes.
+        if query_db.strip() != expected_db.strip():
+            raise ValueError(
+                "Fieldset '%s' targets a different database than this query.\n"
+                "  Query database:    %s\n"
+                "  Fieldset database: %s\n"
+                "Rebuild the query with set_database() on the fieldset's "
+                "database, or pick a fieldset for the current database."
+                % (fs.get('name', '<unknown>'), query_db, expected_db)
+            )
 
     def deselect(self, *args):
         """

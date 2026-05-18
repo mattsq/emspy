@@ -554,6 +554,11 @@ class MockConnection(Connection):
                     "name": "Forbidden Group",
                     "description": "Raises on get_group.",
                 },
+                {
+                    "id": "real-ids-group-id",
+                    "name": "Real IDs Group",
+                    "description": "Fieldsets with entity-type-shaped field IDs.",
+                },
             ]
         elif uri_keys == ('fieldset', 'fieldset_group'):
             _ems_id, group_id = uri_args
@@ -605,6 +610,18 @@ class MockConnection(Connection):
                 raise HTTPError(
                     "http://mock/forbidden", 403, "Forbidden", {}, None
                 )
+            elif group_id == "real-ids-group-id":
+                content = {
+                    "groups": [],
+                    "fieldSets": [
+                        {"id": "Flights Fieldset", "name": "Flights Fieldset",
+                         "description": "All foqa-flights."},
+                        {"id": "Aircraft Fieldset", "name": "Aircraft Fieldset",
+                         "description": "All aircraft."},
+                        {"id": "Mixed DB Fieldset", "name": "Mixed DB Fieldset",
+                         "description": "Mixes flights and aircraft."},
+                    ],
+                }
             else:
                 content = {"groups": [], "fieldSets": []}
         elif uri_keys == ('fieldset', 'fieldset'):
@@ -656,6 +673,39 @@ class MockConnection(Connection):
                 }
             elif fieldset_name == "Empty Fieldset":
                 content = {"name": "Empty Fieldset", "schemaItems": []}
+            elif fieldset_name == "Flights Fieldset":
+                content = {
+                    "name": "Flights Fieldset",
+                    "schemaItems": [
+                        {"moniker": "[-hub-][field][[[ems-core][entity-type][foqa-flights]][[ems-core][base-field][flight.exact-date]]]",
+                         "description": "Flight Date",
+                         "type": "dateTime"},
+                        {"moniker": "[-hub-][field][[[ems-core][entity-type][foqa-flights]][[ems-core][base-field][flight.exist-takeoff]]]",
+                         "description": "Takeoff Valid",
+                         "type": "boolean"},
+                    ],
+                }
+            elif fieldset_name == "Aircraft Fieldset":
+                content = {
+                    "name": "Aircraft Fieldset",
+                    "schemaItems": [
+                        {"moniker": "[-hub-][field][[[ems-aux][entity-type][aircraft]][[ems-aux][base-field][aircraft.serial-number]]]",
+                         "description": "Serial Number",
+                         "type": "string"},
+                    ],
+                }
+            elif fieldset_name == "Mixed DB Fieldset":
+                content = {
+                    "name": "Mixed DB Fieldset",
+                    "schemaItems": [
+                        {"moniker": "[-hub-][field][[[ems-core][entity-type][foqa-flights]][[ems-core][base-field][flight.exact-date]]]",
+                         "description": "Flight Date",
+                         "type": "dateTime"},
+                        {"moniker": "[-hub-][field][[[ems-aux][entity-type][aircraft]][[ems-aux][base-field][aircraft.serial-number]]]",
+                         "description": "Serial Number",
+                         "type": "string"},
+                    ],
+                }
             else:
                 raise HTTPError(
                     "http://mock/fieldset", 404, "Not Found", {}, None
