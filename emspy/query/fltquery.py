@@ -12,6 +12,7 @@ from future.utils import string_types
 
 from emspy.query import *
 from .query import Query
+from .fieldset import Fieldset
 
 
 class FltQuery(Query):
@@ -38,6 +39,7 @@ class FltQuery(Query):
     def _init_assets(self, data_file):
         # Query._init_assets(self)
         self.__flight = Flight(self._conn, self._ems_id, data_file)
+        self.__fieldset = Fieldset(self._conn, self._ems_id)
 
     def set_database(self, name):
         """
@@ -173,6 +175,98 @@ class FltQuery(Query):
             }
             self.__queryset['select'].append(d)
             self.__columns.append(field)
+
+    def select_fieldset(self, fieldset, group=None, aggregate='none'):
+        """
+        Expand a server-curated fieldset into the query's select list.
+
+        Fields are expanded client-side: every field in the fieldset is
+        appended as an individual {fieldId, aggregate} entry. The /query
+        endpoint never sees the fieldset reference.
+
+        Parameters
+        ----------
+        fieldset: str or dict
+            Either a fieldset name (str) or a pre-fetched fieldset dict
+            returned by Fieldset.get_fieldset. If a name is given without
+            `group`, the fieldset-group tree is walked to find a unique
+            match.
+        group: str, optional
+            Fieldset-group ID. Skips the tree walk when `fieldset` is a name.
+        aggregate: str, optional
+            Aggregation function applied to every field. Default 'none'.
+            Same allowlist as select().
+
+        Examples
+        --------
+        >>> query.select_fieldset("Standard Flight Metrics")
+        >>> query.select_fieldset("Standard Flight Metrics", group="<group-id>")
+        >>> fs = Fieldset(conn, ems_id).get_fieldset("<group-id>", "Standard Flight Metrics")
+        >>> query.select_fieldset(fs)
+        """
+        aggs = ['none', 'avg', 'count', 'max', 'min', 'stdev', 'sum', 'var']
+        if aggregate not in aggs:
+            sys.exit("Wrong aggregation selected. Use one of %s." % aggs)
+
+        fs = self._resolve_fieldset_arg(fieldset, group)
+        fields_df = fs['fields']
+
+        if len(fields_df) == 0:
+            print("-- Warning: fieldset '%s' contains no fields; nothing added."
+                  % fs.get('name', '<unknown>'))
+            return
+
+        added = 0
+        for _, row in fields_df.iterrows():
+            field_id = row.get('id')
+            if not field_id or (isinstance(field_id, float) and pd.isna(field_id)):
+                print("-- Skipping field '%s' in fieldset '%s': missing field ID."
+                      % (row.get('name'), fs.get('name', '<unknown>')))
+                continue
+            self.__queryset['select'].append({
+                'fieldId': field_id,
+                'aggregate': aggregate,
+            })
+            self.__columns.append({
+                'id': field_id,
+                'name': row.get('name') or field_id,
+                'type': row.get('type'),
+            })
+            added += 1
+
+        print("-- Added %d field%s from fieldset '%s'."
+              % (added, 's' if added != 1 else '', fs.get('name', '<unknown>')))
+
+    def _resolve_fieldset_arg(self, fieldset, group):
+        # Pre-fetched fieldset dict.
+        if isinstance(fieldset, dict) and isinstance(fieldset.get('fields'), pd.DataFrame):
+            return fieldset
+
+        if not isinstance(fieldset, string_types):
+            raise TypeError(
+                "fieldset must be a fieldset name (str) or a fieldset dict "
+                "returned by Fieldset.get_fieldset()."
+            )
+
+        if group is not None:
+            return self.__fieldset.get_fieldset(group, fieldset)
+
+        # No group supplied: walk the tree for a unique match.
+        hits = self.__fieldset.find(fieldset)
+        if len(hits) == 0:
+            raise ValueError(
+                "Fieldset '%s' not found in any visible fieldset group. "
+                "List groups with Fieldset.get_groups() and contents with "
+                "Fieldset.get_group(group_id)." % fieldset
+            )
+        if len(hits) > 1:
+            paths = [' > '.join(h['path']) for h in hits]
+            raise ValueError(
+                "Fieldset name '%s' is ambiguous - found in multiple groups:\n  %s\n"
+                "Pass `group` explicitly to disambiguate."
+                % (fieldset, '\n  '.join(paths))
+            )
+        return self.__fieldset.get_fieldset(hits[0]['group_id'], fieldset)
 
     def deselect(self, *args):
         """

@@ -195,6 +195,50 @@ query.select_id(
 `select_id(...)` can be freely mixed with `select(...)` in the same query. If a field id is already present in the local metadata tree it is resolved from cache; otherwise it is looked up via the EMS API and cached for future use.
 
 
+### Selecting a fieldset
+
+A **fieldset** is a server-curated bundle of fields that an analyst has
+grouped together. Instead of looking up each field by name, you can ask
+EMS for the whole fieldset and expand it into your query's select list
+in one call. Fields added via a fieldset stack alongside fields added by
+`select()` — they all become individual entries in the underlying
+queryset.
+
+```python
+from emspy.query import Fieldset
+
+# Option A: by name only - walks the fieldset-group tree to find a unique
+# match. Raises ValueError if the name is ambiguous or unknown.
+query.select_fieldset("Standard Flight Metrics")
+
+# Option B: by name with an explicit group ID - skips the tree walk.
+query.select_fieldset("Standard Flight Metrics", group="<group-id>")
+
+# Option C: pre-fetch the fieldset, then apply it. Useful when you want
+# to inspect the field list first or reuse the same fieldset across
+# queries without re-fetching.
+fs = Fieldset(conn, query.get_ems_id()).get_fieldset(
+    "<group-id>", "Standard Flight Metrics"
+)
+print(fs['fields'])           # DataFrame of id / name / type
+query.select_fieldset(fs)
+```
+
+`select_fieldset()` accepts the same `aggregate` keyword as `select()`,
+applied uniformly to every field in the fieldset.
+
+To discover what's available, the `Fieldset` class exposes three
+listing methods (results are cached in-memory per session):
+
+```python
+fset = Fieldset(conn, ems_id)
+fset.get_groups()                                 # top-level groups
+fset.get_group("<group-id>")                      # groups + fieldsets in a group
+fset.get_fieldset("<group-id>", "<fieldset-name>")  # fields in a fieldset
+fset.find("My Fieldset")                          # depth-first search by name
+fset.clear_cache()
+```
+
 ### Group by & Order by
 Similarly, you can pass the grouping and ordering condition:
 
