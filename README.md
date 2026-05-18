@@ -197,47 +197,80 @@ query.select_id(
 
 ### Selecting a fieldset
 
-A **fieldset** is a server-curated bundle of fields that an analyst has
-grouped together. Instead of looking up each field by name, you can ask
-EMS for the whole fieldset and expand it into your query's select list
-in one call. Fields added via a fieldset stack alongside fields added by
-`select()` — they all become individual entries in the underlying
-queryset.
+A **fieldset** is a server-curated bundle of fields. `select_fieldset(...)`
+fetches a fieldset and expands it into the query as normal `{fieldId,
+aggregate}` select entries. The query endpoint does not receive a fieldset
+reference; it receives the individual field IDs.
+
+Fieldset selection can be mixed with `select(...)` and `select_id(...)` in the
+same query:
+
+```python
+query.select("Flight Record")
+query.select_id(
+    "[-hub-][field][[[ems-core][entity-type][foqa-flights]][[ems-core][base-field][flight.uid]]]"
+)
+query.select_fieldset("Standard Flight Metrics", group="<group-id>")
+```
+
+If you know the fieldset group ID, pass it with `group=...`. This is the
+fastest and most predictable form because it avoids walking the full
+fieldset-group tree:
+
+```python
+query.select_fieldset("Standard Flight Metrics", group="<group-id>")
+```
+
+If you do not know the group ID, you can pass only the fieldset name. emsPy
+will search visible fieldset groups and require a single match:
+
+```python
+query.select_fieldset("Standard Flight Metrics")
+```
+
+This raises `ValueError` if no visible fieldset has that name, or if the name
+appears in more than one group. In that case, find the fieldset and pass
+`group=` explicitly.
+
+Use `Fieldset` directly when you want to inspect available groups or preview
+the field list before adding it to a query:
 
 ```python
 from emspy.query import Fieldset
 
-# Option A: by name only - walks the fieldset-group tree to find a unique
-# match. Raises ValueError if the name is ambiguous or unknown.
-query.select_fieldset("Standard Flight Metrics")
+fieldsets = Fieldset(conn, query.get_ems_id())
 
-# Option B: by name with an explicit group ID - skips the tree walk.
-query.select_fieldset("Standard Flight Metrics", group="<group-id>")
+groups = fieldsets.get_groups()
+contents = fieldsets.get_group("<group-id>")
+matches = fieldsets.find("Standard Flight Metrics")
 
-# Option C: pre-fetch the fieldset, then apply it. Useful when you want
-# to inspect the field list first or reuse the same fieldset across
-# queries without re-fetching.
-fs = Fieldset(conn, query.get_ems_id()).get_fieldset(
-    "<group-id>", "Standard Flight Metrics"
-)
-print(fs['fields'])           # DataFrame of id / name / type
+fs = fieldsets.get_fieldset("<group-id>", "Standard Flight Metrics")
+print(fs["fields"])  # DataFrame with id, name, and type columns
+
 query.select_fieldset(fs)
 ```
 
-`select_fieldset()` accepts the same `aggregate` keyword as `select()`,
-applied uniformly to every field in the fieldset.
-
-To discover what's available, the `Fieldset` class exposes three
-listing methods (results are cached in-memory per session):
+`select_fieldset(...)` accepts the same `aggregate` keyword as `select(...)`.
+The aggregate is applied to every field in the fieldset:
 
 ```python
-fset = Fieldset(conn, ems_id)
-fset.get_groups()                                 # top-level groups
-fset.get_group("<group-id>")                      # groups + fieldsets in a group
-fset.get_fieldset("<group-id>", "<fieldset-name>")  # fields in a fieldset
-fset.find("My Fieldset")                          # depth-first search by name
-fset.clear_cache()
+query.select_fieldset(
+    "Standard Flight Metrics",
+    group="<group-id>",
+    aggregate="avg"
+)
 ```
+
+Fieldsets are cached in memory for the life of the `Fieldset` object. Use
+`clear_cache()` if you need to force fresh API results:
+
+```python
+fieldsets.clear_cache()
+```
+
+When a query already has a selected database, emsPy checks shaped field IDs in
+the fieldset against that database and raises `ValueError` if the fieldset
+targets a different database or mixes fields from multiple databases.
 
 ### Group by & Order by
 Similarly, you can pass the grouping and ordering condition:
