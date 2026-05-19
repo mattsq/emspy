@@ -250,16 +250,12 @@ print(fs["fields"])  # DataFrame with id, name, and type columns
 query.select_fieldset(fs)
 ```
 
-`select_fieldset(...)` accepts the same `aggregate` keyword as `select(...)`.
-The aggregate is applied to every field in the fieldset:
-
-```python
-query.select_fieldset(
-    "Standard Flight Metrics",
-    group="<group-id>",
-    aggregate="avg"
-)
-```
+`select_fieldset(...)` does not accept an `aggregate` keyword - every field is
+added with `aggregate='none'`. If you need to aggregate, add the relevant
+fields individually via `select(...)` or `select_id(...)` with the appropriate
+per-field aggregation. (Applying one aggregation uniformly across a curated
+fieldset is rarely sensible, and some aggregations - e.g. `stdev` on datetime
+fields - are not processed correctly by the API.)
 
 Fieldsets are cached in memory for the life of the `Fieldset` object. Use
 `clear_cache()` if you need to force fresh API results:

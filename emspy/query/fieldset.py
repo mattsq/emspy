@@ -265,12 +265,17 @@ class Fieldset(Asset):
             if contents is None or len(contents) == 0:
                 return
 
+            target = fieldset_name.lower()
             fs_rows = contents[
                 (contents['type'] == 'fieldset')
-                & (contents['name'] == fieldset_name)
+                & (contents['name'].str.lower() == target)
             ]
-            if len(fs_rows) > 0:
-                hits.append({'group_id': gid, 'path': list(path)})
+            for _, fs_row in fs_rows.iterrows():
+                hits.append({
+                    'group_id': gid,
+                    'name': fs_row['name'],
+                    'path': list(path),
+                })
 
             sub_rows = contents[contents['type'] == 'group']
             for _, row in sub_rows.iterrows():

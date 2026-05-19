@@ -4,12 +4,14 @@
 
 ### New features
 
-- `FltQuery.select_fieldset(fieldset, group=None, aggregate='none')` expands a
-  server-curated fieldset into the query's select list in one call. Accepts
-  either a pre-fetched fieldset dict or a name; without `group`, walks the
-  fieldset-group tree depth-first to find a unique match. Fields are expanded
-  client-side into individual `{fieldId, aggregate}` entries - the `/query`
-  endpoint never sees the fieldset reference.
+- `FltQuery.select_fieldset(fieldset, group=None)` expands a server-curated
+  fieldset into the query's select list in one call. Accepts either a
+  pre-fetched fieldset dict or a name; without `group`, walks the
+  fieldset-group tree depth-first to find a unique match (name matching is
+  case-insensitive). Fields are expanded client-side into individual
+  `{fieldId, aggregate='none'}` entries - the `/query` endpoint never sees
+  the fieldset reference. Aggregation is not exposed at the fieldset level;
+  use `select()` / `select_id()` for per-field aggregation.
 - New `Fieldset` class (in `emspy/query/fieldset.py`) wraps the GE EMS
   `/fieldset-groups` endpoint family. Exposes `get_groups()`,
   `get_group(group_id)`, `get_fieldset(group_id, name)`, `find(name)` and

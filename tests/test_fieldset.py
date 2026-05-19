@@ -153,6 +153,17 @@ def test_find_unambiguous_match(fieldset):
     hits = fieldset.find('Mock Fieldset')
     assert len(hits) == 1
     assert hits[0]['group_id'] == 'mock-group-id'
+    assert hits[0]['name'] == 'Mock Fieldset'
+    assert hits[0]['path'] == ['Mock Group']
+
+
+def test_find_is_case_insensitive(fieldset):
+    hits = fieldset.find('mock fieldset')
+    assert len(hits) == 1
+    assert hits[0]['group_id'] == 'mock-group-id'
+    # Canonical casing is preserved in the hit so downstream get_fieldset()
+    # calls hit the API with the case the server expects.
+    assert hits[0]['name'] == 'Mock Fieldset'
     assert hits[0]['path'] == ['Mock Group']
 
 
@@ -250,6 +261,15 @@ def test_select_fieldset_by_name_walks_tree(fltquery):
     }
 
 
+def test_select_fieldset_by_name_is_case_insensitive(fltquery):
+    fltquery.select_fieldset('mock fieldset')
+    queryset = fltquery._FltQuery__queryset
+    assert len(queryset['select']) == 3
+    assert {e['fieldId'] for e in queryset['select']} == {
+        'field-id-1', 'field-id-2', 'field-id-3'
+    }
+
+
 def test_select_fieldset_ambiguous_name_raises(fltquery):
     with pytest.raises(ValueError) as exc:
         fltquery.select_fieldset('Dup Fieldset')
@@ -276,13 +296,6 @@ def test_select_fieldset_with_prefetched_dict(fltquery):
     assert queryset['select'][0]['fieldId'] == 'alt-field-1'
 
 
-def test_select_fieldset_with_aggregate(fltquery):
-    fltquery.select_fieldset('Mock Fieldset', group='mock-group-id',
-                              aggregate='avg')
-    for entry in fltquery._FltQuery__queryset['select']:
-        assert entry['aggregate'] == 'avg'
-
-
 def test_select_fieldset_stacks_with_regular_select(fltquery):
     # Verifies fieldset entries coexist with select() entries in one queryset.
     # Stub a fake select() entry directly rather than going through fieldtree
@@ -305,12 +318,6 @@ def test_select_fieldset_stacks_with_regular_select(fltquery):
 def test_select_fieldset_rejects_bad_type(fltquery):
     with pytest.raises(TypeError):
         fltquery.select_fieldset(12345)
-
-
-def test_select_fieldset_rejects_unknown_aggregate(fltquery):
-    with pytest.raises(SystemExit):
-        fltquery.select_fieldset('Mock Fieldset', group='mock-group-id',
-                                  aggregate='median')
 
 
 def test_select_fieldset_empty_fieldset_is_noop(fltquery):

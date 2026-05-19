@@ -191,13 +191,20 @@ class FltQuery(Query):
             self.__queryset['select'].append(d)
             self.__columns.append(field)
 
-    def select_fieldset(self, fieldset, group=None, aggregate='none'):
+    def select_fieldset(self, fieldset, group=None):
         """
         Expand a server-curated fieldset into the query's select list.
 
         Fields are expanded client-side: every field in the fieldset is
-        appended as an individual {fieldId, aggregate} entry. The /query
-        endpoint never sees the fieldset reference.
+        appended as an individual {fieldId, aggregate} entry with
+        aggregate='none'. The /query endpoint never sees the fieldset
+        reference.
+
+        Aggregation is intentionally not exposed here: applying a single
+        aggregation uniformly across every field in a curated fieldset is
+        rarely sensible, and some aggregations (e.g. stdev on datetime
+        fields) are not processed correctly by the API. To aggregate, add
+        the relevant fields individually via select() or select_id().
 
         Parameters
         ----------
@@ -205,12 +212,9 @@ class FltQuery(Query):
             Either a fieldset name (str) or a pre-fetched fieldset dict
             returned by Fieldset.get_fieldset. If a name is given without
             `group`, the fieldset-group tree is walked to find a unique
-            match.
+            match (name matching is case-insensitive).
         group: str, optional
             Fieldset-group ID. Skips the tree walk when `fieldset` is a name.
-        aggregate: str, optional
-            Aggregation function applied to every field. Default 'none'.
-            Same allowlist as select().
 
         Examples
         --------
@@ -219,10 +223,6 @@ class FltQuery(Query):
         >>> fs = Fieldset(conn, ems_id).get_fieldset("<group-id>", "Standard Flight Metrics")
         >>> query.select_fieldset(fs)
         """
-        aggs = ['none', 'avg', 'count', 'max', 'min', 'stdev', 'sum', 'var']
-        if aggregate not in aggs:
-            sys.exit("Wrong aggregation selected. Use one of %s." % aggs)
-
         fs = self._resolve_fieldset_arg(fieldset, group)
         fields_df = fs['fields']
 
@@ -242,7 +242,7 @@ class FltQuery(Query):
                 continue
             self.__queryset['select'].append({
                 'fieldId': field_id,
-                'aggregate': aggregate,
+                'aggregate': 'none',
             })
             self.__columns.append({
                 'id': field_id,
@@ -283,7 +283,7 @@ class FltQuery(Query):
                 "Pass `group` explicitly to disambiguate."
                 % (fieldset, '\n  '.join(paths))
             )
-        return self.__fieldset.get_fieldset(hits[0]['group_id'], fieldset)
+        return self.__fieldset.get_fieldset(hits[0]['group_id'], hits[0]['name'])
 
     def _verify_fieldset_database_match(self, fs):
         # Skipped silently when no database has been selected yet (the user can
