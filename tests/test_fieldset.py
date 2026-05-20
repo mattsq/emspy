@@ -401,3 +401,62 @@ def test_select_fieldset_skips_verification_for_unshaped_ids(
         'Mock Fieldset', group='mock-group-id'
     )
     assert len(fltquery_with_flights_db._FltQuery__queryset['select']) == 3
+
+
+# deselect against fieldset-added fields ------------------------------------
+
+def test_deselect_fieldset_field_by_name(fltquery):
+    fltquery.select_fieldset('Mock Fieldset', group='mock-group-id')
+    assert len(fltquery._FltQuery__queryset['select']) == 3
+
+    fltquery.deselect('Landing Airport Code')
+
+    qs = fltquery._FltQuery__queryset
+    cols = fltquery._FltQuery__columns
+    assert len(qs['select']) == 2
+    assert 'field-id-2' not in {e['fieldId'] for e in qs['select']}
+    assert 'field-id-2' not in {c['id'] for c in cols}
+    assert {c['id'] for c in cols} == {'field-id-1', 'field-id-3'}
+
+
+def test_deselect_fieldset_field_by_name_is_case_insensitive(fltquery):
+    fltquery.select_fieldset('Mock Fieldset', group='mock-group-id')
+    fltquery.deselect('landing airport')
+    qs = fltquery._FltQuery__queryset
+    assert len(qs['select']) == 2
+    assert 'field-id-2' not in {e['fieldId'] for e in qs['select']}
+
+
+def test_deselect_fieldset_field_by_exact_id(fltquery):
+    fltquery.select_fieldset('Mock Fieldset', group='mock-group-id')
+    fltquery.deselect('field-id-2')
+    qs = fltquery._FltQuery__queryset
+    cols = fltquery._FltQuery__columns
+    assert len(qs['select']) == 2
+    assert {c['id'] for c in cols} == {'field-id-1', 'field-id-3'}
+
+
+def test_deselect_unknown_field_raises_with_selection_listed(fltquery):
+    fltquery.select_fieldset('Mock Fieldset', group='mock-group-id')
+    with pytest.raises(ValueError) as exc:
+        fltquery.deselect('does-not-exist')
+    msg = str(exc.value)
+    assert 'no matching field' in msg
+    # The error should name what's actually selected so the user can correct
+    # the call without printing the queryset themselves.
+    assert 'Takeoff Airport Code' in msg
+    assert 'field-id-1' in msg
+    # Nothing was removed.
+    assert len(fltquery._FltQuery__queryset['select']) == 3
+
+
+def test_deselect_removes_only_matching_field(fltquery):
+    fltquery.select_fieldset('Mock Fieldset', group='mock-group-id')
+    fltquery.deselect('field-id-1')
+    fltquery.deselect('field-id-3')
+    qs = fltquery._FltQuery__queryset
+    cols = fltquery._FltQuery__columns
+    assert len(qs['select']) == 1
+    assert qs['select'][0]['fieldId'] == 'field-id-2'
+    assert len(cols) == 1
+    assert cols[0]['id'] == 'field-id-2'

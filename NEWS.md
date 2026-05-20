@@ -29,10 +29,20 @@
   and unambiguous when the field id is already known. Backed by a new
   `Flight.resolve_id()` that checks the local fieldtree cache first and
   falls back to the EMS field API, caching the result.
-- `deselect()` now matches columns by field ID rather than full dict
-  equality, so fields added via the API fallback path of `select_id` (which
-  may have different keys than what `search_fields` returns) can be removed
-  cleanly.
+- `deselect()` no longer requires the targeted field to be present in the
+  local fieldtree. It now matches the supplied keyword directly against the
+  current selection - first by exact field id, then by case-insensitive
+  substring against the field name as it appears in the select list. This
+  fixes a gap where fields added via `select_fieldset()` or via the API
+  fallback path of `select_id()` could not be removed. Raises `ValueError`
+  with the current selection listed if nothing matches.
+
+  **Behavioural change:** the old `deselect()` went through `search_fields`
+  with `unique=True` and removed only the *shortest-named* matching field
+  when the keyword was ambiguous. The new `deselect()` removes **every**
+  selected field whose name contains the substring. Callers that relied on
+  the old single-removal semantics should pass an exact field id, or a
+  longer name fragment that uniquely identifies the target.
 
 ### Bug fixes
 

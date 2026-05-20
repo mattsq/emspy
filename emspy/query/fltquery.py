@@ -325,25 +325,50 @@ class FltQuery(Query):
 
     def deselect(self, *args):
         """
-        Removes fields from the query
+        Remove fields from the current selection.
+
+        For each argument, match against the currently-selected fields:
+        first by exact field id, then by case-insensitive substring against
+        the selected field name. Raises ``ValueError`` listing the current
+        selection if neither pass finds a match.
+
+        No fieldtree lookup is involved, so this works uniformly for fields
+        added via ``select()``, ``select_id()``, or ``select_fieldset()``.
 
         Parameters
         ----------
         args:
-            fields to remove
+            Field ids (exact) or substrings of selected field names.
 
         Returns
         -------
         None
         """
-        fields = self.__flight.search_fields(*args)
-        if not isinstance(fields, list):
-            fields = [fields]
-        for field in fields:
-            matching_entries = [d for d in self.__queryset['select'] if d['fieldId'] == field['id']]
-            for entry in matching_entries:
-                self.__queryset['select'].remove(entry)
-            self.__columns = [c for c in self.__columns if c['id'] != field['id']]
+        for arg in args:
+            ids_to_remove = {c['id'] for c in self.__columns if c.get('id') == arg}
+            if not ids_to_remove and isinstance(arg, string_types):
+                arg_lower = arg.lower()
+                ids_to_remove = {
+                    c['id'] for c in self.__columns
+                    if isinstance(c.get('name'), string_types)
+                    and arg_lower in c['name'].lower()
+                }
+            if not ids_to_remove:
+                preview = [{'id': c.get('id'), 'name': c.get('name')}
+                           for c in self.__columns[:10]]
+                extra = len(self.__columns) - len(preview)
+                tail = (" ...and %d more" % extra) if extra > 0 else ""
+                raise ValueError(
+                    "deselect(%r): no matching field in the current selection. "
+                    "Pass either the exact field id or a substring of the "
+                    "selected field name. Currently selected: %s%s"
+                    % (arg, preview, tail)
+                )
+            self.__queryset['select'] = [
+                d for d in self.__queryset['select']
+                if d['fieldId'] not in ids_to_remove
+            ]
+            self.__columns = [c for c in self.__columns if c['id'] not in ids_to_remove]
 
     def group_by(self, *args):
         """
