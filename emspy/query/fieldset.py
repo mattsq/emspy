@@ -1,11 +1,3 @@
-from __future__ import absolute_import
-from __future__ import print_function
-
-import sys
-if sys.version_info < (3, 0):
-    from future import standard_library
-    standard_library.install_aliases()
-
 from urllib.error import HTTPError
 
 import pandas as pd
@@ -97,10 +89,11 @@ class Fieldset(Asset):
         """
         List the top-level fieldset groups available on the EMS system.
 
-        Returns a DataFrame with columns: id, name, description.
+        Returns a DataFrame with columns: id, name, description. Cached
+        results are returned as copies so callers cannot mutate the cache.
         """
         if not refresh and self._root_cache is not None:
-            return self._root_cache
+            return self._root_cache.copy()
 
         _, result = self._conn.request(
             uri_keys=('fieldset', 'fieldset_groups'),
@@ -121,7 +114,7 @@ class Fieldset(Asset):
             df = df[['id', 'name', 'description']]
 
         self._root_cache = df
-        return df
+        return df.copy()
 
     def get_group(self, group_id, refresh=False):
         """
@@ -135,7 +128,7 @@ class Fieldset(Asset):
             raise ValueError("group_id must be a non-empty string.")
 
         if not refresh and group_id in self._group_cache:
-            return self._group_cache[group_id]
+            return self._group_cache[group_id].copy()
 
         _, result = self._conn.request(
             uri_keys=('fieldset', 'fieldset_group'),
@@ -178,7 +171,7 @@ class Fieldset(Asset):
             )
 
         self._group_cache[group_id] = df
-        return df
+        return df.copy()
 
     def get_fieldset(self, group_id, fieldset_name, refresh=False):
         """
@@ -199,7 +192,7 @@ class Fieldset(Asset):
 
         key = (group_id, fieldset_name)
         if not refresh and key in self._fieldset_cache:
-            return self._fieldset_cache[key]
+            return self._copy_fieldset(self._fieldset_cache[key])
 
         _, result = self._conn.request(
             uri_keys=('fieldset', 'fieldset'),
@@ -224,7 +217,19 @@ class Fieldset(Asset):
             'fields': fields_df,
         }
         self._fieldset_cache[key] = fs
-        return fs
+        return self._copy_fieldset(fs)
+
+    @staticmethod
+    def _copy_fieldset(fs):
+        # Shallow-copy the dict with a fresh DataFrame so mutations to the
+        # returned value (e.g. ``fs['fields'].drop(...)``) don't bleed
+        # into the cache.
+        return {
+            'name': fs['name'],
+            'group_id': fs['group_id'],
+            'ems_id': fs['ems_id'],
+            'fields': fs['fields'].copy(),
+        }
 
     def find(self, fieldset_name, max_depth=6):
         """

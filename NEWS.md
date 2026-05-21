@@ -35,14 +35,13 @@
   substring against the field name as it appears in the select list. This
   fixes a gap where fields added via `select_fieldset()` or via the API
   fallback path of `select_id()` could not be removed. Raises `ValueError`
-  with the current selection listed if nothing matches.
+  with the current selection listed if nothing matches, and prints a line
+  naming the fields that were removed.
 
-  **Behavioural change:** the old `deselect()` went through `search_fields`
-  with `unique=True` and removed only the *shortest-named* matching field
-  when the keyword was ambiguous. The new `deselect()` removes **every**
-  selected field whose name contains the substring. Callers that relied on
-  the old single-removal semantics should pass an exact field id, or a
-  longer name fragment that uniquely identifies the target.
+  Default behaviour matches the pre-0.7 `search_fields(unique=True)`
+  semantics: when a substring matches more than one selected field, only
+  the shortest-named match is removed. Pass `all_matches=True` to remove
+  every matching field in a single call.
 
 ### Bug fixes
 

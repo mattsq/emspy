@@ -152,6 +152,13 @@ class FltQuery(Query):
         metadata tree search. This is faster and avoids ambiguity when the
         field id is already known.
 
+        Each id that is not already in the local fieldtree cache triggers
+        one ``/ems-systems/<ems_id>/databases/<db_id>/fields/<field_id>``
+        API call via ``Flight.resolve_id`` (the result is cached for the
+        rest of the session). For bulk selection of many uncached ids,
+        consider calling ``update_fieldtree(...)`` first to prime the
+        cache in a single tree walk.
+
         Parameters
         ----------
         args:
@@ -289,7 +296,8 @@ class FltQuery(Query):
         # Skipped silently when no database has been selected yet (the user can
         # call set_database() later) or when no field IDs carry an extractable
         # entity-type token (e.g. mock/test field IDs).
-        if getattr(self.__flight, '_db_id', None) is None:
+        query_db = self.__flight.get_db_id()
+        if query_db is None:
             return
 
         entity_types = []
@@ -309,7 +317,6 @@ class FltQuery(Query):
             )
 
         expected_db = unique_types[0]
-        query_db = self.__flight._db_id
         # Tolerate stray whitespace on user-supplied database IDs (a common
         # copy/paste hazard). Case and bracket structure remain significant:
         # entity tokens embed case-sensitive UUID / profile hashes.
@@ -323,37 +330,63 @@ class FltQuery(Query):
                 % (fs.get('name', '<unknown>'), query_db, expected_db)
             )
 
-    def deselect(self, *args):
+    def deselect(self, *args, **kwargs):
         """
         Remove fields from the current selection.
 
         For each argument, match against the currently-selected fields:
         first by exact field id, then by case-insensitive substring against
-        the selected field name. Raises ``ValueError`` listing the current
-        selection if neither pass finds a match.
+        the selected field name. No fieldtree lookup is involved, so this
+        works uniformly for fields added via ``select()``, ``select_id()``,
+        or ``select_fieldset()``.
 
-        No fieldtree lookup is involved, so this works uniformly for fields
-        added via ``select()``, ``select_id()``, or ``select_fieldset()``.
+        When a substring matches more than one selected field, by default
+        only the single shortest-named match is removed (preserving the
+        pre-0.7 ``unique=True`` ``search_fields`` semantics). Pass
+        ``all_matches=True`` to remove every matching field.
+
+        Raises ``ValueError`` if no field matches.
 
         Parameters
         ----------
         args:
             Field ids (exact) or substrings of selected field names.
 
+        Keyword arguments
+        -----------------
+        all_matches: bool
+            If True, remove every selected field whose name contains the
+            substring. Default False (remove only the shortest-named match).
+
         Returns
         -------
         None
         """
+        all_matches = kwargs.pop('all_matches', False)
+        if kwargs:
+            raise TypeError(
+                "deselect() got unexpected keyword arguments: %s"
+                % list(kwargs.keys())
+            )
+
         for arg in args:
-            ids_to_remove = {c['id'] for c in self.__columns if c.get('id') == arg}
-            if not ids_to_remove and isinstance(arg, string_types):
+            # Pass 1: exact id match (unambiguous).
+            matched = [c for c in self.__columns if c.get('id') == arg]
+
+            # Pass 2: case-insensitive substring match on the column name.
+            if not matched and isinstance(arg, string_types):
                 arg_lower = arg.lower()
-                ids_to_remove = {
-                    c['id'] for c in self.__columns
+                matched = [
+                    c for c in self.__columns
                     if isinstance(c.get('name'), string_types)
                     and arg_lower in c['name'].lower()
-                }
-            if not ids_to_remove:
+                ]
+                # Default to legacy single-removal: keep only the
+                # shortest-named match unless caller opted in to all.
+                if len(matched) > 1 and not all_matches:
+                    matched = [min(matched, key=lambda c: len(c['name']))]
+
+            if not matched:
                 preview = [{'id': c.get('id'), 'name': c.get('name')}
                            for c in self.__columns[:10]]
                 extra = len(self.__columns) - len(preview)
@@ -364,11 +397,21 @@ class FltQuery(Query):
                     "selected field name. Currently selected: %s%s"
                     % (arg, preview, tail)
                 )
+
+            ids_to_remove = {c['id'] for c in matched}
             self.__queryset['select'] = [
                 d for d in self.__queryset['select']
                 if d['fieldId'] not in ids_to_remove
             ]
             self.__columns = [c for c in self.__columns if c['id'] not in ids_to_remove]
+
+            removed = [(c.get('name') or c.get('id'), c.get('id')) for c in matched]
+            if len(removed) == 1:
+                print("-- Deselected '%s' (%s)." % removed[0])
+            else:
+                print("-- Deselected %d fields: %s"
+                      % (len(removed),
+                         ", ".join("'%s' (%s)" % r for r in removed)))
 
     def group_by(self, *args):
         """

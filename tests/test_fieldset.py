@@ -460,3 +460,59 @@ def test_deselect_removes_only_matching_field(fltquery):
     assert qs['select'][0]['fieldId'] == 'field-id-2'
     assert len(cols) == 1
     assert cols[0]['id'] == 'field-id-2'
+
+
+def test_deselect_ambiguous_substring_removes_shortest_by_default(fltquery):
+    # 'Mock Fieldset' has 'Takeoff Airport Code' and 'Landing Airport Code';
+    # the substring 'airport' matches both. The default (legacy) behaviour
+    # is to remove only the shortest-named match (tie -> first encountered).
+    fltquery.select_fieldset('Mock Fieldset', group='mock-group-id')
+    fltquery.deselect('airport')
+
+    qs = fltquery._FltQuery__queryset
+    # Two airport fields and one date field were selected; one airport is
+    # removed by the default single-match behaviour.
+    assert len(qs['select']) == 2
+    remaining_ids = {e['fieldId'] for e in qs['select']}
+    # field-id-3 (Flight Date) must still be present; exactly one of
+    # field-id-1 / field-id-2 must remain.
+    assert 'field-id-3' in remaining_ids
+    assert len(remaining_ids & {'field-id-1', 'field-id-2'}) == 1
+
+
+def test_deselect_all_matches_removes_every_substring_hit(fltquery):
+    fltquery.select_fieldset('Mock Fieldset', group='mock-group-id')
+    fltquery.deselect('airport', all_matches=True)
+
+    qs = fltquery._FltQuery__queryset
+    remaining_ids = {e['fieldId'] for e in qs['select']}
+    # Both airport fields removed, only the date field remains.
+    assert remaining_ids == {'field-id-3'}
+
+
+def test_deselect_rejects_unknown_kwarg(fltquery):
+    fltquery.select_fieldset('Mock Fieldset', group='mock-group-id')
+    with pytest.raises(TypeError):
+        fltquery.deselect('field-id-1', bogus=True)
+
+
+def test_deselect_prints_removed_field(fltquery, capsys):
+    fltquery.select_fieldset('Mock Fieldset', group='mock-group-id')
+    capsys.readouterr()  # drain the select_fieldset print
+
+    fltquery.deselect('field-id-2')
+    out = capsys.readouterr().out
+    assert 'Deselected' in out
+    assert 'field-id-2' in out
+    assert 'Landing Airport Code' in out
+
+
+def test_deselect_prints_multi_removal_summary(fltquery, capsys):
+    fltquery.select_fieldset('Mock Fieldset', group='mock-group-id')
+    capsys.readouterr()
+
+    fltquery.deselect('airport', all_matches=True)
+    out = capsys.readouterr().out
+    assert 'Deselected 2 fields' in out
+    assert 'Takeoff Airport Code' in out
+    assert 'Landing Airport Code' in out
